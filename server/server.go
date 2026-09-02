@@ -36,7 +36,16 @@ func main() {
 			continue
 		}
 
+		cc, wrerr := conn.WriteTo(buffer[0:n], clientAddr)
+
+		if wrerr != nil {
+			fmt.Printf("net.WriteTo() error: %s\n", wrerr)
+		} else {
+			fmt.Printf("Wrote %d bytes to socket\n", cc)
+		}
+
 		fmt.Printf("Got message from %s: %s\n", clientAddr, string(buffer[:n]))
 	}
+
 
 }
