@@ -1,48 +1,75 @@
 package main
 
-import(
+import (
 	"fmt"
-	"net"
 	"log"
+	"net"
 	"os"
+
+	"github.com/gen2brain/malgo"
 )
 
-
-func main(){
-	addr , err := net.ResolveUDPAddr("udp","localhost:8080")
-
+func main() {
+	fmt.Println("Starting UDP Audio Client (Microphone)...")
+	
+	// Connect to server
+	addr, err := net.ResolveUDPAddr("udp", "localhost:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	conn , err := net.DialUDP("udp",nil,addr)
-
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer conn.Close()
+
+	// Initialize Malgo context
+	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+		fmt.Printf("LOG: %v\n", message)
+	})
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error initializing context:", err)
+		os.Exit(1)
 	}
+	defer func() {
+		_ = ctx.Uninit()
+		ctx.Free()
+	}()
 
-	if len(os.Args) < 2 {
-		log.Fatal("Please provide a message as an argument.")
-	}
-	b := []byte(os.Args[1])
+	// Configure Capture Device
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	deviceConfig.Capture.Format = malgo.FormatS16
+	deviceConfig.Capture.Channels = 1
+	deviceConfig.SampleRate = 44100
 
-	cc, wrerr := conn.Write(b)
-	if wrerr != nil {
-		fmt.Printf("conn.Write() error: %s\n", wrerr)
-	} else {
-		fmt.Printf("Wrote %d bytes to socket\n", cc)
-		c := make([]byte, cc+10)
-		cc, rderr := conn.Read(c)
-		if rderr != nil {
-			fmt.Printf("conn.Read() error: %s\n", rderr)
-		} else {
-			fmt.Printf("Read %d bytes from socket\n", cc)
-			fmt.Printf("Bytes: %q\n", string(c[0:cc]))
+	// Audio Callback
+	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		// Send captured audio directly over UDP
+		_, err := conn.Write(pInputSamples)
+		if err != nil {
+			fmt.Println("Error sending audio:", err)
 		}
 	}
 
-	if err = conn.Close(); err != nil {
-		log.Fatal(err)
+	// Initialize and start device
+	deviceCallbacks := malgo.DeviceCallbacks{
+		Data: onRecvFrames,
 	}
+	device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
+	if err != nil {
+		fmt.Println("Error initializing device:", err)
+		os.Exit(1)
+	}
+	defer device.Uninit()
+
+	err = device.Start()
+	if err != nil {
+		fmt.Println("Error starting device:", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Recording and streaming... Press ENTER to stop.")
+	var input string
+	fmt.Scanln(&input)
 }

@@ -4,48 +4,93 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+
+	"github.com/gen2brain/malgo"
 )
 
-type conn struct {
-	conn net.Conn
-}
-
 func main() {
+	fmt.Println("Starting UDP Audio Server (Speaker)...")
 	listener, err := net.ResolveUDPAddr("udp", "localhost:8080")
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Println("the port on the udp server is on:- ", listener)
 
 	conn, err := net.ListenUDP("udp", listener)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer conn.Close()
+	fmt.Println("Listening on", listener)
 
-	buffer := make([]byte, 1024)
+	// Channel to pass audio from network to soundcard
+	audioChan := make(chan []byte, 100)
+
+	// Initialize Malgo context
+	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+		fmt.Printf("LOG: %v\n", message)
+	})
+	if err != nil {
+		fmt.Println("Error initializing context:", err)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = ctx.Uninit()
+		ctx.Free()
+	}()
+
+	// Configure Playback Device
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Playback)
+	deviceConfig.Playback.Format = malgo.FormatS16
+	deviceConfig.Playback.Channels = 1
+	deviceConfig.SampleRate = 44100
+
+	// Audio Callback
+	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		select {
+		case audioData := <-audioChan:
+			copy(pOutputSample, audioData)
+		default:
+			// Fill with silence if no data
+			for i := range pOutputSample {
+				pOutputSample[i] = 0
+			}
+		}
+	}
+
+	// Initialize and start device
+	deviceCallbacks := malgo.DeviceCallbacks{
+		Data: onRecvFrames,
+	}
+	device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
+	if err != nil {
+		fmt.Println("Error initializing device:", err)
+		os.Exit(1)
+	}
+	defer device.Uninit()
+
+	err = device.Start()
+	if err != nil {
+		fmt.Println("Error starting device:", err)
+		os.Exit(1)
+	}
+
+	// Network loop
+	buffer := make([]byte, 4096)
 	for {
-		n, clientAddr, err := conn.ReadFromUDP(buffer)
-
+		n, _, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			log.Printf("Read error: %v", err)
 			continue
 		}
-
-		cc, wrerr := conn.WriteTo(buffer[0:n], clientAddr)
-
-		if wrerr != nil {
-			fmt.Printf("net.WriteTo() error: %s\n", wrerr)
-		} else {
-			fmt.Printf("Wrote %d bytes to socket\n", cc)
+		audioChunk := make([]byte, n)
+		copy(audioChunk, buffer[:n])
+		
+		// Non-blocking send (drop packets if channel is full to prevent memory leak)
+		select {
+		case audioChan <- audioChunk:
+		default:
+			// Dropping packet because buffer is full
 		}
-
-		fmt.Printf("Got message from %s: %s\n", clientAddr, string(buffer[:n]))
 	}
-
-
 }

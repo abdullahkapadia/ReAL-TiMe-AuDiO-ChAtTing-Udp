@@ -25,7 +25,6 @@ func main() {
 	// Step 2: Configure the Device
 	// We want a "Duplex" device, meaning it handles both Capture (mic) and Playback (speaker) simultaneously.
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Duplex)
-	
 	// Set the format to 16-bit PCM. This is standard raw audio.
 	deviceConfig.Capture.Format = malgo.FormatS16
 	// 1 channel means Mono sound. 2 would be Stereo.
