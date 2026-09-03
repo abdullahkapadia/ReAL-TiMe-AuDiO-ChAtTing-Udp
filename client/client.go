@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/gen2brain/malgo"
+	"github.com/zaf/g711"
 )
 
 func main() {
@@ -45,8 +46,11 @@ func main() {
 
 	// Audio Callback
 	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
-		// Send captured audio directly over UDP
-		_, err := conn.Write(pInputSamples)
+		// Compress 16-bit PCM to 8-bit G.711 u-law
+		compressedAudio := g711.EncodeUlaw(pInputSamples)
+		
+		// Send compressed audio directly over UDP
+		_, err := conn.Write(compressedAudio)
 		if err != nil {
 			fmt.Println("Error sending audio:", err)
 		}

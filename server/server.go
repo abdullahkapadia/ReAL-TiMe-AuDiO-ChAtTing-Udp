@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/gen2brain/malgo"
+	"github.com/zaf/g711"
 )
 
 func main() {
@@ -83,12 +84,12 @@ func main() {
 			log.Printf("Read error: %v", err)
 			continue
 		}
-		audioChunk := make([]byte, n)
-		copy(audioChunk, buffer[:n])
+		// Decode the 8-bit G.711 chunk back into 16-bit PCM
+		decompressedAudio := g711.DecodeUlaw(buffer[:n])
 		
 		// Non-blocking send (drop packets if channel is full to prevent memory leak)
 		select {
-		case audioChan <- audioChunk:
+		case audioChan <- decompressedAudio:
 		default:
 			// Dropping packet because buffer is full
 		}
