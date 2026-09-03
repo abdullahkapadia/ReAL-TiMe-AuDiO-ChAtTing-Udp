@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -29,8 +30,9 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Connected to", addr)
 
-	// Global mute state
+	// Global mute state and Room ID
 	var isMuted bool = true
+	var currentRoomID uint32 = 123
 	var mu sync.Mutex
 
 	// HTTP Server for UI
@@ -40,6 +42,22 @@ func main() {
 			isMuted = !isMuted
 			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	http.HandleFunc("/api/room", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var req struct {
+				RoomID uint32 `json:"roomId"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+				mu.Lock()
+				currentRoomID = req.RoomID
+				mu.Unlock()
+				w.WriteHeader(http.StatusOK)
+			} else {
+				http.Error(w, "Bad request", http.StatusBadRequest)
+			}
 		}
 	})
 	
@@ -94,6 +112,7 @@ func main() {
 		// --- MICROPHONE CAPTURE LOGIC ---
 		mu.Lock()
 		muted := isMuted
+		roomID := currentRoomID
 		mu.Unlock()
 
 		if muted {
@@ -102,11 +121,12 @@ func main() {
 
 		// Compress 16-bit PCM to 8-bit G.711 u-law
 		compressedAudio := g711.EncodeUlaw(pInputSamples)
-		
-		// Create a custom packet: [4-byte Sequence] + [Compressed Audio]
-		packet := make([]byte, 4+len(compressedAudio))
-		binary.LittleEndian.PutUint32(packet[0:4], sequenceNumber)
-		copy(packet[4:], compressedAudio)
+
+		// Create a custom packet: [4-byte RoomID] + [4-byte Sequence] + [Compressed Audio]
+		packet := make([]byte, 8+len(compressedAudio))
+		binary.LittleEndian.PutUint32(packet[0:4], roomID)
+		binary.LittleEndian.PutUint32(packet[4:8], sequenceNumber)
+		copy(packet[8:], compressedAudio)
 		
 		// Send custom packet directly over UDP
 		_, err := conn.Write(packet)
@@ -144,18 +164,19 @@ func main() {
 			if err != nil {
 				continue
 			}
-			if n < 4 {
+			if n < 8 {
 				continue
 			}
 			
-			incomingSeq := binary.LittleEndian.Uint32(buffer[0:4])
+			// buffer[0:4] is RoomID (skip it since we are already in the room)
+			incomingSeq := binary.LittleEndian.Uint32(buffer[4:8])
 			
 			// Drop out-of-order packets (Jitter Fix)
 			if incomingSeq > lastReceivedSeq || lastReceivedSeq == 0 {
 				lastReceivedSeq = incomingSeq
 				
 				// Decode the 8-bit G.711 back into 16-bit PCM
-				decompressedAudio := g711.DecodeUlaw(buffer[4:n])
+				decompressedAudio := g711.DecodeUlaw(buffer[8:n])
 				
 				select {
 				case audioChan <- decompressedAudio:

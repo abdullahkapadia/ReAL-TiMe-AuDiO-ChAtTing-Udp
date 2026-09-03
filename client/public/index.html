@@ -6,17 +6,15 @@
     <title>Voice Chat Client</title>
     <style>
         body {
-            background-color: #ffffff;
+            background-color: #f9f9f9;
             color: #333333;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
             margin: 0;
         }
-        h1 { font-weight: 500; margin-bottom: 20px; }
         
         /* Auth Container */
         #auth-container {
@@ -27,6 +25,7 @@
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background-color: white;
         }
         input {
             padding: 10px;
@@ -43,6 +42,7 @@
             font-size: 14px;
             font-weight: bold;
             cursor: pointer;
+            transition: 0.2s;
         }
         button:hover { background-color: #0056b3; }
         .toggle-text {
@@ -53,38 +53,102 @@
             margin-top: 10px;
         }
 
-        /* Voice Dashboard */
+        /* Voice Dashboard Layout */
         #voice-dashboard {
             display: none;
+            width: 900px;
+            height: 600px;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            overflow: hidden;
+            flex-direction: row;
+        }
+
+        /* Sidebar - Friends */
+        .sidebar {
+            width: 250px;
+            background-color: #f1f3f5;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
             flex-direction: column;
+            padding: 20px;
+        }
+        .sidebar h2 { font-size: 18px; margin-top: 0; margin-bottom: 20px; color: #444;}
+        .friend-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .friend-box input { flex: 1; width: 100%; }
+        .friends-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .friend-item {
+            padding: 10px;
+            background-color: white;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid #e0e0e0;
+        }
+
+        /* Main Area - Rooms & Voice */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top Bar - Rooms */
+        .top-bar {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
         }
+        .room-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .room-controls h3 { margin: 0; font-size: 16px; color: #555;}
+        
+        /* Center - Mic */
+        .center-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
         #mic-btn {
             background-color: #f0f0f0;
             border: 2px solid #dddddd;
             border-radius: 50%;
-            width: 140px;
-            height: 140px;
+            width: 160px;
+            height: 160px;
             cursor: pointer;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
             color: #333;
         }
-        #mic-btn:hover { background-color: #e4e4e4; transform: translateY(-2px); }
         #mic-btn.active {
             background-color: #e6ffe6;
             border-color: #4caf50;
             color: #2e7d32;
         }
-        svg { width: 48px; height: 48px; margin-bottom: 8px; fill: currentColor; }
-        .status-text { font-size: 16px; font-weight: 600; }
-        
+        svg { width: 54px; height: 54px; margin-bottom: 8px; fill: currentColor; }
+        .status-text { font-size: 18px; font-weight: 600; }
         #error-msg { color: red; font-size: 12px; text-align: center; height: 15px;}
+        
     </style>
 </head>
 <body>
@@ -102,20 +166,47 @@
         <div class="toggle-text" onclick="toggleMode()" id="toggle-mode">Need an account? Register</div>
     </div>
 
-    <!-- Voice Screen -->
+    <!-- Voice Dashboard -->
     <div id="voice-dashboard">
-        <h1>Voice Client</h1>
-        <h3 id="welcome-text" style="margin-top: -20px; color: #666; font-weight: 400;"></h3>
-        <button id="mic-btn">
-            <svg viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-            <span class="status-text" id="status-text">Mic: OFF</span>
-        </button>
+        <!-- Friends Sidebar -->
+        <div class="sidebar">
+            <h2>Friends</h2>
+            <div class="friend-box">
+                <input type="number" id="friend-id-input" placeholder="User ID">
+                <button onclick="sendFriendRequest()">Add</button>
+            </div>
+            <div class="friends-list" id="friends-list-container">
+                <!-- Friends will populate here -->
+                <div style="font-size: 12px; color: #888;">No friends found.</div>
+            </div>
+        </div>
+
+        <!-- Main Area -->
+        <div class="main-area">
+            <div class="top-bar">
+                <h3 id="welcome-text">Dashboard</h3>
+                <div class="room-controls">
+                    <h3>Room:</h3>
+                    <input type="number" id="room-id-input" value="123" style="width: 80px;">
+                    <button onclick="joinRoom()">Join</button>
+                </div>
+            </div>
+            
+            <div class="center-stage">
+                <button id="mic-btn">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <span class="status-text" id="status-text">Mic: OFF</span>
+                </button>
+                <p style="color: #888; font-size: 14px; margin-top: 20px;">Join a room and unmute to talk to friends!</p>
+            </div>
+        </div>
     </div>
 
     <script>
         let isLogin = true;
+        let myUserId = 1; // We will extract this from login later (hardcoded for test if not returned)
         
         function toggleMode() {
             isLogin = !isLogin;
@@ -135,7 +226,6 @@
             const body = isLogin ? { username, password } : { username, email, password };
 
             try {
-                // Fetch to Auth API Server on port 8000
                 const res = await fetch(`http://localhost:8000${endpoint}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -143,10 +233,14 @@
                 });
                 
                 if (res.ok) {
-                    // Success! Show Voice Dashboard
+                    const data = await res.json();
+                    if(data.userId) myUserId = data.userId; // Save ID if backend returns it
+                    
                     document.getElementById('auth-container').style.display = 'none';
                     document.getElementById('voice-dashboard').style.display = 'flex';
                     document.getElementById('welcome-text').innerText = `Welcome, ${username}!`;
+                    
+                    fetchFriends(); // Load friends list
                 } else {
                     const text = await res.text();
                     document.getElementById('error-msg').innerText = text;
@@ -156,16 +250,67 @@
             }
         }
 
-        // Voice Logic
+        // --- FRIENDS LOGIC ---
+        async function fetchFriends() {
+            try {
+                const res = await fetch(`http://localhost:8000/friends?userId=${myUserId}`);
+                if (res.ok) {
+                    const friends = await res.json();
+                    const container = document.getElementById('friends-list-container');
+                    container.innerHTML = '';
+                    if(friends && friends.length > 0) {
+                        friends.forEach(f => {
+                            const div = document.createElement('div');
+                            div.className = 'friend-item';
+                            // Show the OTHER person's ID
+                            const friendId = f.requesterId == myUserId ? f.addresseeId : f.requesterId;
+                            div.innerText = `User #${friendId} (Friend)`;
+                            container.appendChild(div);
+                        });
+                    } else {
+                        container.innerHTML = '<div style="font-size: 12px; color: #888;">No friends found.</div>';
+                    }
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function sendFriendRequest() {
+            const targetId = document.getElementById('friend-id-input').value;
+            if(!targetId) return;
+            try {
+                await fetch(`http://localhost:8000/friends/request`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requesterId: parseInt(myUserId), addresseeId: parseInt(targetId) })
+                });
+                alert('Friend request sent (or accepted if they already requested you)!');
+                fetchFriends(); // Refresh
+            } catch(e) { alert("Error sending request"); }
+        }
+
+        // --- ROOM LOGIC ---
+        async function joinRoom() {
+            const roomId = document.getElementById('room-id-input').value;
+            if(!roomId) return;
+            try {
+                // Tell the local Go client to switch rooms
+                await fetch('/api/room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomId: parseInt(roomId) })
+                });
+                alert(`Successfully joined Room ${roomId}!`);
+            } catch(e) { alert("Error joining room"); }
+        }
+
+        // --- VOICE LOGIC ---
         const btn = document.getElementById('mic-btn');
         const text = document.getElementById('status-text');
         let isActive = false;
 
         btn.addEventListener('click', async () => {
             try {
-                // Toggle mic on UDP client running on port 3000
                 await fetch('/api/toggle', { method: 'POST' });
-                
                 isActive = !isActive;
                 if (isActive) {
                     btn.classList.add('active');

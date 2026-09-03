@@ -35,6 +35,11 @@ func main() {
 	// Register the endpoints with CORS enabled
 	http.HandleFunc("/register", enableCORS(handlers.Register))
 	http.HandleFunc("/login", enableCORS(handlers.Login))
+	
+	// Friends API
+	http.HandleFunc("/friends/request", enableCORS(handlers.SendFriendRequest))
+	http.HandleFunc("/friends/accept", enableCORS(handlers.AcceptFriendRequest))
+	http.HandleFunc("/friends", enableCORS(handlers.GetFriends))
 
 	// Start the HTTP server on port 8000
 	port := ":8000"

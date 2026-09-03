@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -21,8 +22,9 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Listening on", listener)
 
-	// Map of active clients in the global "room"
-	clients := make(map[string]*net.UDPAddr)
+	// Map of active clients organized by Room ID
+	// RoomID -> Map of IP Address -> net.UDPAddr
+	rooms := make(map[uint32]map[string]*net.UDPAddr)
 	var mu sync.Mutex
 
 	// Network loop
@@ -35,19 +37,30 @@ func main() {
 			continue
 		}
 		
+		// Ensure packet is large enough to contain RoomID (4) + Sequence (4) = 8 bytes
+		if n < 8 {
+			continue
+		}
+
+		// Read the first 4 bytes to determine which room this packet belongs to
+		roomID := binary.LittleEndian.Uint32(buffer[0:4])
 		addrStr := addr.String()
 
 		mu.Lock()
-		// If this is a new client, add them to the room
-		if _, exists := clients[addrStr]; !exists {
-			fmt.Printf("New client joined the voice room: %s\n", addrStr)
-			clients[addrStr] = addr
+		// If this is a new room, initialize it
+		if rooms[roomID] == nil {
+			rooms[roomID] = make(map[string]*net.UDPAddr)
 		}
 
-		// Forward the audio packet to everyone ELSE in the room
-		for clientAddrStr, clientAddr := range clients {
+		// If this is a new client in the room, add them
+		if _, exists := rooms[roomID][addrStr]; !exists {
+			fmt.Printf("New client %s joined Voice Room %d\n", addrStr, roomID)
+			rooms[roomID][addrStr] = addr
+		}
+
+		// Forward the audio packet to everyone ELSE in this specific room
+		for clientAddrStr, clientAddr := range rooms[roomID] {
 			if clientAddrStr != addrStr {
-				// We don't want to send the user's own voice back to them
 				conn.WriteToUDP(buffer[:n], clientAddr)
 			}
 		}
