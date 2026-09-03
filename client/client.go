@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -45,15 +46,23 @@ func main() {
 	deviceConfig.SampleRate = 44100
 
 	// Audio Callback
+	var sequenceNumber uint32 = 0
 	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
 		// Compress 16-bit PCM to 8-bit G.711 u-law
 		compressedAudio := g711.EncodeUlaw(pInputSamples)
 		
-		// Send compressed audio directly over UDP
-		_, err := conn.Write(compressedAudio)
+		// Create a custom packet: [4-byte Sequence] + [Compressed Audio]
+		packet := make([]byte, 4+len(compressedAudio))
+		binary.LittleEndian.PutUint32(packet[0:4], sequenceNumber)
+		copy(packet[4:], compressedAudio)
+		
+		// Send custom packet directly over UDP
+		_, err := conn.Write(packet)
 		if err != nil {
 			fmt.Println("Error sending audio:", err)
 		}
+		
+		sequenceNumber++
 	}
 
 	// Initialize and start device

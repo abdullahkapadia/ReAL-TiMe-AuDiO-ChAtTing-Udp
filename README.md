@@ -8,3 +8,8 @@ It was a small start, but it helped me understand how UDP communication works an
 ## Day 2
 
 Feeling frustrated while trying to understand and learn the `malgo` package, but pushing through and continuing to explore how it works.
+
+
+## Day 3
+
+applied compression breaking 16 bit audio into 8 bit audio toaavoid high network usage.

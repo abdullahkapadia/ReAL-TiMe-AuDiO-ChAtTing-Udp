@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -78,20 +79,43 @@ func main() {
 
 	// Network loop
 	buffer := make([]byte, 4096)
+	var lastReceivedSeq uint32 = 0
+	
 	for {
 		n, _, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			log.Printf("Read error: %v", err)
 			continue
 		}
-		// Decode the 8-bit G.711 chunk back into 16-bit PCM
-		decompressedAudio := g711.DecodeUlaw(buffer[:n])
 		
-		// Non-blocking send (drop packets if channel is full to prevent memory leak)
-		select {
-		case audioChan <- decompressedAudio:
-		default:
-			// Dropping packet because buffer is full
+		// Ensure packet is large enough to contain our 4-byte header
+		if n < 4 {
+			continue
+		}
+		
+		// Extract sequence number from the first 4 bytes
+		incomingSeq := binary.LittleEndian.Uint32(buffer[0:4])
+		
+		// Jitter Fix: Drop out-of-order / late packets
+		// If this is the first packet, or if it's newer than the last one we processed
+		if incomingSeq > lastReceivedSeq || lastReceivedSeq == 0 {
+			lastReceivedSeq = incomingSeq
+			
+			// Optional: Print to console to prove it works
+			// fmt.Printf("Playing packet %d\n", incomingSeq)
+
+			// Decode the 8-bit G.711 chunk (skipping the 4-byte header) back into 16-bit PCM
+			decompressedAudio := g711.DecodeUlaw(buffer[4:n])
+			
+			// Non-blocking send
+			select {
+			case audioChan <- decompressedAudio:
+			default:
+				// Dropping packet because buffer is full
+			}
+		} else {
+			// If we get here, the packet arrived late and we are throwing it away!
+			// fmt.Printf("Dropped late packet %d (Current: %d)\n", incomingSeq, lastReceivedSeq)
 		}
 	}
 }
