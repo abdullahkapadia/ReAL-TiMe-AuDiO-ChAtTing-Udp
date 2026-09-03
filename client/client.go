@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"sync"
 
 	"github.com/gen2brain/malgo"
 	"github.com/zaf/g711"
@@ -25,6 +27,31 @@ func main() {
 		log.Fatal(err)
 	}
 	defer conn.Close()
+	fmt.Println("Connected to", addr)
+
+	// Global mute state
+	var isMuted bool = true
+	var mu sync.Mutex
+
+	// HTTP Server for UI
+	http.HandleFunc("/api/toggle", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mu.Lock()
+			isMuted = !isMuted
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+	
+	// Serve static files from "public" directory
+	http.Handle("/", http.FileServer(http.Dir("./public")))
+
+	go func() {
+		fmt.Println("UI Dashboard running at http://localhost:3000")
+		if err := http.ListenAndServe(":3000", nil); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// Initialize Malgo context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
@@ -48,6 +75,14 @@ func main() {
 	// Audio Callback
 	var sequenceNumber uint32 = 0
 	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		mu.Lock()
+		muted := isMuted
+		mu.Unlock()
+
+		if muted {
+			return // Microphone is off
+		}
+
 		// Compress 16-bit PCM to 8-bit G.711 u-law
 		compressedAudio := g711.EncodeUlaw(pInputSamples)
 		

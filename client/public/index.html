@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Chat Client</title>
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #333333;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            font-weight: 500;
+            margin-bottom: 40px;
+        }
+        #mic-btn {
+            background-color: #f0f0f0;
+            border: 2px solid #dddddd;
+            border-radius: 50%;
+            width: 140px;
+            height: 140px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        #mic-btn:hover {
+            background-color: #e4e4e4;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.08);
+        }
+        #mic-btn:active {
+            transform: translateY(0);
+        }
+        #mic-btn.active {
+            background-color: #e6ffe6;
+            border-color: #4caf50;
+            color: #2e7d32;
+        }
+        svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 8px;
+            fill: currentColor;
+        }
+        .status-text {
+            font-size: 16px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <h1>Voice Client</h1>
+    
+    <button id="mic-btn">
+        <!-- SVG Mic Icon -->
+        <svg viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+        <span class="status-text" id="status-text">Mic: OFF</span>
+    </button>
+
+    <script>
+        const btn = document.getElementById('mic-btn');
+        const text = document.getElementById('status-text');
+        let isActive = false;
+
+        btn.addEventListener('click', async () => {
+            try {
+                // Call Go API to toggle mic
+                await fetch('/api/toggle', { method: 'POST' });
+                
+                isActive = !isActive;
+                if (isActive) {
+                    btn.classList.add('active');
+                    text.innerText = 'Mic: ON';
+                } else {
+                    btn.classList.remove('active');
+                    text.innerText = 'Mic: OFF';
+                }
+            } catch (error) {
+                console.error("Error toggling mic:", error);
+                alert("Could not connect to Go server.");
+            }
+        });
+    </script>
+</body>
+</html>
