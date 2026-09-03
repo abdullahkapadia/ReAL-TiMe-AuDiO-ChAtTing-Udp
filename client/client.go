@@ -66,15 +66,32 @@ func main() {
 		ctx.Free()
 	}()
 
-	// Configure Capture Device
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	// Configure Duplex Device (Capture & Playback)
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Duplex)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = 1
+	deviceConfig.Playback.Format = malgo.FormatS16
+	deviceConfig.Playback.Channels = 1
 	deviceConfig.SampleRate = 44100
+
+	// Channel to pass audio from network to soundcard
+	audioChan := make(chan []byte, 100)
 
 	// Audio Callback
 	var sequenceNumber uint32 = 0
 	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		// --- SPEAKER PLAYBACK LOGIC ---
+		select {
+		case audioData := <-audioChan:
+			copy(pOutputSample, audioData)
+		default:
+			// Fill with silence if no data
+			for i := range pOutputSample {
+				pOutputSample[i] = 0
+			}
+		}
+
+		// --- MICROPHONE CAPTURE LOGIC ---
 		mu.Lock()
 		muted := isMuted
 		mu.Unlock()
@@ -116,6 +133,38 @@ func main() {
 		fmt.Println("Error starting device:", err)
 		os.Exit(1)
 	}
+
+	// UDP Receiver Goroutine
+	go func() {
+		buffer := make([]byte, 4096)
+		var lastReceivedSeq uint32 = 0
+		
+		for {
+			n, err := conn.Read(buffer)
+			if err != nil {
+				continue
+			}
+			if n < 4 {
+				continue
+			}
+			
+			incomingSeq := binary.LittleEndian.Uint32(buffer[0:4])
+			
+			// Drop out-of-order packets (Jitter Fix)
+			if incomingSeq > lastReceivedSeq || lastReceivedSeq == 0 {
+				lastReceivedSeq = incomingSeq
+				
+				// Decode the 8-bit G.711 back into 16-bit PCM
+				decompressedAudio := g711.DecodeUlaw(buffer[4:n])
+				
+				select {
+				case audioChan <- decompressedAudio:
+				default:
+					// Drop if speaker buffer is full
+				}
+			}
+		}
+	}()
 
 	fmt.Println("Recording and streaming... Press ENTER to stop.")
 	var input string
